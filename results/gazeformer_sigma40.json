@@ -1,0 +1,8 @@
+{
+  "full_val_cc": 0.6650094085184356,
+  "clean_val_cc": 0.664999214872998,
+  "full_val_nss": 3.640651271590574,
+  "full_val_auc": 0.8342485199110473,
+  "num_samples": 10,
+  "sigma_gt": 40
+}
