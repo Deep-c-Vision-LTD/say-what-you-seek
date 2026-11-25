@@ -45,7 +45,7 @@ Pre-computed result JSONs for every number in the paper are in `results/`.
 official Gazeformer checkpoint (from its own release; see the Gazeformer repo for the
 checkpoint and precomputed features, expected under `gazeformer_assets/` with the repo
 under `gazeformer_repo/`) as a density predictor, sweeping the density-conversion
-bandwidth in the baseline's favor. `baseline_hat_sagemaker_eval.py` is the
+bandwidth in the baseline's favor. `baseline_hat_gpu_eval.py` is the
 GPU-environment script used to run HAT (its MSDeformAttn ops require CUDA); it documents
 the exact dependency pins needed in 2026 (detectron2 v0.6, pillow<10, timm 0.6.12, and
 `stages.`-prefix key remaps for both the M2F backbone pickle and the HAT_TP checkpoint).
@@ -68,7 +68,7 @@ eval_nss_auc.py                     NSS/AUC from rebuilt fixation points
 process_cocosearch18.py             dataset preparation
 baseline_gazeformer_density.py      Gazeformer as density predictor (our protocol)
 baseline_gazeformer_sigma_sweep.py  bandwidth steelman sweep
-baseline_hat_sagemaker_eval.py      HAT on a CUDA GPU (documented dependency pins)
+baseline_hat_gpu_eval.py            HAT on a CUDA GPU (documented dependency pins)
 baseline_hat_sigma_sweep.py         HAT bandwidth steelman from saved raw points
 make_fig_conditioning.py            Fig. 1
 results/                            pre-computed JSONs backing every number

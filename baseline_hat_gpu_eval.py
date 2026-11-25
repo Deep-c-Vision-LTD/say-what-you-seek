@@ -1,14 +1,19 @@
 """
-SageMaker entrypoint: evaluate HAT (CVPR'24) as a density-map predictor on our
+GPU entrypoint: evaluate HAT (CVPR'24) as a density-map predictor on our
 COCO-Search18 val protocol, mirroring the Gazeformer eval exactly:
   - 10 sampled scanpaths per (image, task) pair (sample_action=True),
   - fixations mapped to 1680x1050 display space, sigma=40 Gaussian (identical to
     GT construction), resized to 224, scored with CC (+ NSS/AUC on human
     fixation points), full val and clean val.
 
-Runtime setup (inside the SM PyTorch 1.13.1/cu117 container):
+Runtime setup (Linux, CUDA GPU, PyTorch 1.13.1/cu117):
   - pip install detectron2 prebuilt wheel (torch1.13/cu117) + wget
   - clone HAT, compile MSDeformAttn ops, download HAT_TP.pt + M2F weights.
+
+Paths (environment variables):
+  HAT_DATA     prepared val data: manifest.json, fixations.json, images/, maps/ (default ./data)
+  HAT_OUT      where the result JSONs are written (default ./out)
+  HAT_WORKDIR  where HAT is cloned and built (default ./hat_work)
 """
 import json, os, subprocess, sys
 
@@ -16,19 +21,22 @@ def sh(cmd, **kw):
     print("+", cmd, flush=True)
     subprocess.run(cmd, shell=True, check=True, **kw)
 
-DATA = os.environ.get("SM_CHANNEL_DATA", "/opt/ml/input/data/data")
-OUT = os.environ.get("SM_MODEL_DIR", "/opt/ml/model")
+DATA = os.path.abspath(os.environ.get("HAT_DATA", "data"))
+OUT = os.path.abspath(os.environ.get("HAT_OUT", "out"))
+HAT_DIR = os.path.join(os.path.abspath(os.environ.get("HAT_WORKDIR", "hat_work")), "HAT")
+os.makedirs(OUT, exist_ok=True)
+os.makedirs(os.path.dirname(HAT_DIR), exist_ok=True)
 
 # ---------- environment ----------
 sh("pip install --no-cache-dir wget 'numpy<2' scipy timm==0.6.12 omegaconf hydra-core 'pillow<10'")
 sh("python -m pip install --no-build-isolation 'git+https://github.com/facebookresearch/detectron2.git@v0.6'")
-sh("git clone --depth 1 https://github.com/cvlab-stonybrook/HAT.git /opt/ml/code/HAT")
+sh(f"git clone --depth 1 https://github.com/cvlab-stonybrook/HAT.git '{HAT_DIR}'")
 # The released M2F_R50.pkl uses mid-2022 d2 dev naming (stages.res*); d2 v0.6's ResNet
 # expects plain res* keys. Reverse HAT's (no-op) remap into a stages.-prefix STRIP.
-sh("""sed -i "s/if k\\[:3\\] == 'res':/if k[:7] == 'stages.':/" /opt/ml/code/HAT/hat/models.py""")
-sh("""sed -i 's/bb_weights_new\\["stages." + k\\] = v/bb_weights_new[k[7:]] = v/' /opt/ml/code/HAT/hat/models.py""")
-sh("grep -n 'stages.' /opt/ml/code/HAT/hat/models.py | head -5")
-os.chdir("/opt/ml/code/HAT")
+sh("""sed -i "s/if k\\[:3\\] == 'res':/if k[:7] == 'stages.':/" """ + f'"{HAT_DIR}/hat/models.py"')
+sh("""sed -i 's/bb_weights_new\\["stages." + k\\] = v/bb_weights_new[k[7:]] = v/' """ + f'"{HAT_DIR}/hat/models.py"')
+sh(f"grep -n 'stages.' '{HAT_DIR}/hat/models.py' | head -5")
+os.chdir(HAT_DIR)
 sh("cd hat/pixel_decoder/ops && TORCH_CUDA_ARCH_LIST='7.5' pip install --no-build-isolation .", env={**os.environ})
 sh("python -c 'import torch, MultiScaleDeformableAttention; print(\"MSDA import OK\")'")
 os.makedirs("checkpoints", exist_ok=True); os.makedirs("pretrained_models", exist_ok=True)
@@ -36,7 +44,7 @@ sh("cd checkpoints && wget -q http://vision.cs.stonybrook.edu/~cvlab_download/HA
 sh("cd pretrained_models && wget -q http://vision.cs.stonybrook.edu/~cvlab_download/HAT/pretrained_models/M2F_R50_MSDeformAttnPixelDecoder.pkl "
    "&& wget -q http://vision.cs.stonybrook.edu/~cvlab_download/HAT/pretrained_models/M2F_R50.pkl")
 
-sys.path.insert(0, "/opt/ml/code/HAT")
+sys.path.insert(0, HAT_DIR)
 import numpy as np
 import torch
 from PIL import Image
